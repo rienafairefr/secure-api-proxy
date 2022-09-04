@@ -3,6 +3,7 @@ import shlex
 import subprocess
 import sys
 import time
+from random import randrange
 from socket import create_connection
 
 import pytest
@@ -10,14 +11,17 @@ import requests
 from xprocess import ProcessStarter
 
 import magicproxy
+from magicproxy.config import load_config
 
-API_PORT = 50000
+API_PORT = randrange(50000, 55000)
 API_HOST = "localhost"
 API_ROOT = f"http://{API_HOST}:{API_PORT}"
-PROXY_PORT = 50001
+PROXY_PORT = randrange(55000, 60000)
 PROXY_HOST = "localhost"
 PROXY_ROOT = f"http://{PROXY_HOST}:{PROXY_PORT}"
 TIMEOUT = 15
+
+config = load_config()
 
 print("API_PORT %s" % API_PORT)
 print("PROXY_PORT %s" % PROXY_PORT)
@@ -69,16 +73,36 @@ def api_integration(xprocess):
 
     xprocess.ensure("api", ApiStarter)
     yield
+    print(open(xprocess.getinfo("api").logpath, 'r').read())
     xprocess.getinfo("api").terminate()
 
 
 @pytest.fixture(scope="module")
 def integration(api_integration, xprocess, request):
     run_async = request.param
+    run_args = [sys.executable]
+    rcfile = None
+    if "COVERAGE_RUN" in os.environ:
+        root_dir = os.path.join(os.path.dirname(__file__), "..")
+        rcfile = os.path.join(root_dir, ".coveragerc")
+        covfile = os.path.join(root_dir, ".coverage")
+        omitted = os.path.join(root_dir, "tests/*")
+        srcdir = os.path.join(root_dir, "src")
+        run_args.extend(
+            [
+                "-m",
+                "coverage",
+                "run",
+                f"--source={srcdir}",
+                f"--rcfile={rcfile}",
+                f"--data-file={covfile}",
+                "-p",
+                f"--omit={omitted}",
+            ]
+        )
 
-    class ProxyStarter(ProcessStarter):
-        args = [
-            sys.executable,
+    run_args.extend(
+        [
             "-m",
             "magicproxy",
             "--host",
@@ -86,8 +110,26 @@ def integration(api_integration, xprocess, request):
             "--port",
             PROXY_PORT,
         ]
-        if run_async:
-            args.append("--async")
+    )
+    if run_async:
+        run_args.append("--async")
+    print(" ".join(str(e) for e in run_args))
+    run_env = {
+        "API_ROOT": API_ROOT,
+        "PYTHONUNBUFFERED": "1",
+        "PUBLIC_ACCESS": PROXY_ROOT,
+        "FLASK_ENV": "development",
+        "FLASK_DEBUG": "1",
+        "PUBLIC_KEY_LOCATION": os.path.abspath(config.public_key_location),
+        "PRIVATE_KEY_LOCATION": os.path.abspath(config.private_key_location),
+        "PUBLIC_CERTIFICATE_LOCATION": os.path.abspath(config.public_certificate_location),
+    }
+    if "COVERAGE_RUN" in os.environ:
+        run_env["COVERAGE_PROCESS_START"] = rcfile
+
+    class ProxyStarter(ProcessStarter):
+        args = run_args
+        env = run_env
         timeout = 15
 
         def startup_check(self):
@@ -98,17 +140,10 @@ def integration(api_integration, xprocess, request):
                 return False
 
         pattern = rf"Running on {PROXY_ROOT}"
-        env = {
-            "API_ROOT": API_ROOT,
-            "PYTHONUNBUFFERED": "1",
-            # "PUBLIC_KEY_LOCATION": tmp_path / 'public.pem',
-            # "PUBLIC_CERTIFICATE_LOCATION": tmp_path / 'public.pem',
-            # "PRIVATE_KEY_LOCATION": tmp_path / 'public.x509.cer',
-            "PUBLIC_ACCESS": PROXY_ROOT,
-        }
 
     xprocess.ensure("proxy", ProxyStarter)
     yield
+    print(open(xprocess.getinfo("proxy").logpath, 'r').read())
     xprocess.getinfo("proxy").terminate()
 
 

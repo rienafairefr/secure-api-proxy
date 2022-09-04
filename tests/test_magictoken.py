@@ -14,11 +14,12 @@
 
 import os
 
+import magicproxy.keys
 from magicproxy import magictoken
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "data")
-KEYS = magictoken.Keys.from_files(
+KEYS = magicproxy.keys.Keys.from_files(
     private_key_file=os.path.join(DATA, "private.pem"),
     certificate_file=os.path.join(DATA, "public.x509.cer"),
 )
@@ -40,7 +41,7 @@ def test_create_and_decode():
 
 
 def test_get_from_env_and_decode():
-    local_keys = magictoken.Keys.from_files(
+    local_keys = magicproxy.keys.Keys.from_files(
         os.path.join(DATA, "private.pem"), os.path.join(DATA, "public.x509.cer")
     )
 

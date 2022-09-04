@@ -18,22 +18,14 @@ import datetime
 
 import google.auth.crypt
 import google.auth.jwt
-from cryptography import x509
-from cryptography.hazmat import backends
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
-from magicproxy.config import PRIVATE_KEY_LOCATION, PUBLIC_CERTIFICATE_LOCATION, SCOPES
-from magicproxy.crypto import generate_keys
+from magicproxy.config import parse_permission, Config
+from magicproxy.keys import _PADDING
 from magicproxy.types import DecodeResult, _Keys
 
 VALIDITY_PERIOD = 365 * 5  # 5 years.
-
-_BACKEND = backends.default_backend()
-_PADDING = padding.OAEP(
-    mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None
-)
 
 
 def _datetime_to_secs(value: datetime.datetime) -> int:
@@ -53,40 +45,6 @@ def _decrypt(key, cipher_text: bytes) -> bytes:
             label=None,
         ),
     )
-
-
-class Keys(_Keys):
-    @classmethod
-    def from_files(cls, private_key_file, certificate_file):
-        with open(private_key_file, "rb") as fh:
-            private_key_bytes = fh.read()
-            private_key = serialization.load_pem_private_key(
-                private_key_bytes, password=None, backend=_BACKEND
-            )
-            private_key_signer = google.auth.crypt.RSASigner.from_string(
-                private_key_bytes
-            )
-
-        with open(certificate_file, "rb") as fh:
-            certificate_pem = fh.read()
-            certificate = x509.load_pem_x509_certificate(certificate_pem, _BACKEND)
-            public_key = certificate.public_key()
-
-        return cls(
-            private_key=private_key,
-            private_key_signer=private_key_signer,
-            public_key=public_key,
-            certificate=certificate,
-            certificate_pem=certificate_pem,
-        )
-
-    @classmethod
-    def from_env(cls):
-        try:
-            return Keys.from_files(PRIVATE_KEY_LOCATION, PUBLIC_CERTIFICATE_LOCATION)
-        except FileNotFoundError:
-            generate_keys()
-            return Keys.from_files(PRIVATE_KEY_LOCATION, PUBLIC_CERTIFICATE_LOCATION)
 
 
 def create(keys: _Keys, token, scopes=None, allowed=None) -> str:
@@ -127,7 +85,7 @@ def decode(keys, token) -> DecodeResult:
     return DecodeResult(claims["token"], claims.get("scopes"), claims.get("allowed"))
 
 
-def magictoken_params_validate(params: dict):
+def magictoken_params_validate(config: Config, params: dict):
     if not params:
         raise ValueError("Request must be json")
 
@@ -141,22 +99,24 @@ def magictoken_params_validate(params: dict):
         )
 
     if "scopes" in params or "scope" in params:
-        params_scopes = params.pop("scope", [])
+        params_scopes = [params["scope"]] if "scope" in params else []
         params_scopes.extend(params.pop("scopes", []))
         for params_scope in params_scopes:
             if not isinstance(params_scope, str):
                 raise ValueError("scope must be a string")
-            if params_scope not in SCOPES:
+            if params_scope not in config.scopes:
                 raise ValueError(
-                    f"scope must be configured on the proxy (valid: {' '.join(SCOPES)})"
+                    f"scope must be configured on the proxy (valid: {' '.join(config.scopes)})"
                 )
         params["scopes"] = params_scopes
 
     elif "allowed" in params:
         if not isinstance(params.get("allowed"), list):
             raise ValueError("allowed must be a list of ")
-        if not all(isinstance(r, str) for r in params.get("allowed", [])):
+        if not all(isinstance(r, str) for r in params["allowed"]):
             raise ValueError("allowed must be a list of strings")
+        for value in params["allowed"]:
+            parse_permission(value)
     else:
         raise ValueError(
             "need one of allowed (spelling out the allowed requests) "
