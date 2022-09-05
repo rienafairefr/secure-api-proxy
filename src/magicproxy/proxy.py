@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import os
 import traceback
 from typing import Tuple, Set
 
@@ -140,4 +141,8 @@ def build_app(config: Config = None):
 
 
 def run_app(host, port, config: Config = None):
-    build_app(config).run(host=host, port=port)
+    build_app(config).run(
+        host=host,
+        port=port,
+        use_reloader=os.environ.get("FLASK_USE_RELOADER") is not None,
+    )
