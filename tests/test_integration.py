@@ -73,7 +73,7 @@ def api_integration(xprocess):
 
     xprocess.ensure("api", ApiStarter)
     yield
-    print(open(xprocess.getinfo("api").logpath, 'r').read())
+    print(open(xprocess.getinfo("api").logpath, "r").read())
     xprocess.getinfo("api").terminate()
 
 
@@ -122,7 +122,9 @@ def integration(api_integration, xprocess, request):
         "FLASK_DEBUG": "1",
         "PUBLIC_KEY_LOCATION": os.path.abspath(config.public_key_location),
         "PRIVATE_KEY_LOCATION": os.path.abspath(config.private_key_location),
-        "PUBLIC_CERTIFICATE_LOCATION": os.path.abspath(config.public_certificate_location),
+        "PUBLIC_CERTIFICATE_LOCATION": os.path.abspath(
+            config.public_certificate_location
+        ),
     }
     if "COVERAGE_RUN" in os.environ:
         run_env["COVERAGE_PROCESS_START"] = rcfile
@@ -143,7 +145,7 @@ def integration(api_integration, xprocess, request):
 
     xprocess.ensure("proxy", ProxyStarter)
     yield
-    print(open(xprocess.getinfo("proxy").logpath, 'r').read())
+    print(open(xprocess.getinfo("proxy").logpath, "r").read())
     xprocess.getinfo("proxy").terminate()
 
 
