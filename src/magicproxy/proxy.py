@@ -12,19 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import os
+import pdb
+import sys
+import threading
 import traceback
-from typing import Tuple, Set
+from io import BytesIO
+from queue import Queue
+from typing import Tuple, Set, BinaryIO
 
 import flask
 import requests
+from flask import Response, make_response
 
 import magicproxy
 import magicproxy.types
 from .config import Config, load_config
-from .headers import clean_request_headers, clean_response_headers
 from . import magictoken
-from . import scopes
 from . import queries
+from . import scopes
+from .config import API_ROOT
+from .headers import clean_request_headers, clean_response_headers
 from .magictoken import magictoken_params_validate
 
 logger = logging.getLogger(__name__)
@@ -56,8 +64,8 @@ def create_magic_token():
 
 
 def _proxy_request(
-    request: flask.Request, url: str, headers=None, **kwargs
-) -> Tuple[bytes, int, dict]:
+        request: flask.Request, url: str, headers=None, **kwargs
+) -> Tuple[Response, dict]:
     clean_headers = clean_request_headers(
         request.headers, custom_request_headers_to_clean
     )
@@ -65,9 +73,20 @@ def _proxy_request(
     if headers:
         clean_headers.update(headers)
 
-    print(
-        f"Proxying to {request.method} {url}\nHeaders: {clean_headers}\nQuery: {request.args}\nContent: {request.data!r}"
-    )
+    queue = Queue()
+    chunk_size = 1024
+    sentinel = object()
+
+    def read_input_stream():
+        while True:
+            b = flask.request.stream.read(chunk_size)
+            if b == b'':
+                break
+            queue.put(b)
+        queue.put(sentinel)
+
+    #t = threading.Thread(target=read_input_stream)
+    #t.start()
 
     # Make the API request
     resp = requests.request(
@@ -75,15 +94,34 @@ def _proxy_request(
         method=request.method,
         headers=clean_headers,
         params=dict(request.args),
-        data=request.data,
+        data=request.stream,
+        stream=True,
         **kwargs,
     )
 
     response_headers = clean_response_headers(resp.headers)
 
-    print(resp, resp.headers, resp.content)
+    return resp, response_headers
 
-    return resp.content, resp.status_code, response_headers
+
+class tee:
+    def __init__(self, _fd1, _fd2):
+        self.fd1 = _fd1
+        self.fd2 = _fd2
+
+    def __del__(self):
+        if self.fd1 != sys.stdout and self.fd1 != sys.stderr:
+            self.fd1.close()
+        if self.fd2 != sys.stdout and self.fd2 != sys.stderr:
+            self.fd2.close()
+
+    def write(self, text):
+        self.fd1.write(text)
+        self.fd2.write(text)
+
+    def flush(self):
+        self.fd1.flush()
+        self.fd2.flush()
 
 
 @app.route("/", defaults={"path": ""})
@@ -95,7 +133,7 @@ def proxy_api(path):
         return "No authorization token presented", 401
     # strip out "Bearer " if needed
     if auth_token.startswith("Bearer "):
-        auth_token = auth_token[len("Bearer ") :]
+        auth_token = auth_token[len("Bearer "):]
 
     try:
         # Validate the magic token
@@ -106,6 +144,7 @@ def proxy_api(path):
     # Validate scopes against URL and method.
     if not scopes.validate_request(
         CONFIG, flask.request.method, path, token_info.scopes, token_info.allowed
+            flask.request.method, path, token_info.scopes, token_info.allowed
     ):
         return (
             "Disallowed by API proxy",
@@ -114,30 +153,83 @@ def proxy_api(path):
 
     path = queries.clean_path_queries(query_params_to_clean, path)
 
-    response = _proxy_request(
+    response, headers = _proxy_request(
         request=flask.request,
         url=f"{CONFIG.api_root}/{path}",
         headers={"Authorization": f"Bearer {token_info.token}"},
     )
 
-    try:
-        scopes.response_callback(
-            CONFIG, flask.request.method, path, *response, token_info.scopes
-        )
-    except Exception as e:
-        logger.error("exception in response_callback")
-        logger.error(e)
-        logger.error(traceback.format_exc())
+    if int(response.headers['content-Length']) > 1_000_000:
+        response_callback_queue = Queue()
+        response_queue = Queue()
+        response_exhausted = threading.Event()
 
-    return response
+        poison = object()
+
+        class ResponseCallbackData:
+            def __init__(self, queue: Queue):
+                self.queue = queue
+
+            def read(self):
+                if not response_exhausted.is_set():
+                    return self.queue.get(block=True)
+                else:
+                    return b''
+
+        def pass_the_bucket():
+            for l in response:
+                response_callback_queue.put(l)
+                response_queue.put(l)
+            response_callback_queue.put(poison)
+            response_queue.put(poison)
+
+        t1 = threading.Thread(target=pass_the_bucket)
+        t1.start()
+
+        # response_callback reads data, that writes to
+
+        def maybe_response_callback(method, path, data, scopes):
+            try:
+                scopes.response_callback(
+                    method, path, data, scopes
+                )
+            except Exception as e:
+                logger.error("exception in response_callback")
+                logger.error(e)
+                logger.error(traceback.format_exc())
+
+        t2 = threading.Thread(target=maybe_response_callback, args=(
+        flask.request.method, path, ResponseCallbackData(response_callback_queue), headers, token_info.scopes))
+        t2.start()
+
+        def generate_response():
+            while True:
+                if not response_exhausted.is_set():
+                    yield response_queue.get(block=True)
+                else:
+                    t1.join()
+                    t2.join()
+
+        return Response(generate_response())
+    else:
+        try:
+            scopes.response_callback(flask.request.method, path, BytesIO(response.content), response.status_code,
+                                     token_info.scopes)
+        except Exception as e:
+            logger.error("exception in response_callback")
+            logger.error(e)
+            logger.error(traceback.format_exc())
+        resp = make_response(response.content, response.status_code)
+        for key, value in response.headers.items():
+            resp.headers.set(key, value)
+        return resp
 
 
-def build_app(config: Config = None):
-    if config is None:
-        config = load_config()
-    app.config["CONFIG"] = config
+def create_app():
+    global keys
+    keys = magictoken.Keys.from_env()
     return app
 
 
-def run_app(host, port, config: Config = None):
-    build_app(config).run(host=host, port=port)
+def run_app(host, port):
+    create_app().run(host=host, port=port, use_reloader=True)

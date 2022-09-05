@@ -2,10 +2,12 @@ import os
 import shlex
 import subprocess
 import sys
+import threading
 import time
 from random import randrange
 from socket import create_connection
 
+import psutil
 import pytest
 import requests
 from xprocess import ProcessStarter
@@ -25,15 +27,6 @@ config = load_config()
 
 print("API_PORT %s" % API_PORT)
 print("PROXY_PORT %s" % PROXY_PORT)
-
-
-def run(cmd):
-    print(" ".join(shlex.quote(s) for s in cmd))
-    return (
-        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        .decode("utf-8")
-        .rstrip("\n")
-    )
 
 
 def wait_for_port(host: str, port: int, timeout: float = 5.0):
@@ -71,9 +64,8 @@ def api_integration(xprocess):
 
         pattern = rf"Running on {API_ROOT}"
 
-    xprocess.ensure("api", ApiStarter)
-    yield
-    print(open(xprocess.getinfo("api").logpath, 'r').read())
+    api_process = xprocess.ensure("api", ApiStarter)
+    yield api_process
     xprocess.getinfo("api").terminate()
 
 
@@ -81,21 +73,16 @@ def api_integration(xprocess):
 def integration(api_integration, xprocess, request):
     run_async = request.param
     run_args = [sys.executable]
-    rcfile = None
     if "COVERAGE_RUN" in os.environ:
         root_dir = os.path.join(os.path.dirname(__file__), "..")
-        rcfile = os.path.join(root_dir, ".coveragerc")
-        covfile = os.path.join(root_dir, ".coverage")
+        dotcov = os.path.join(root_dir, ".coverage-parallel")
         omitted = os.path.join(root_dir, "tests/*")
-        srcdir = os.path.join(root_dir, "src")
         run_args.extend(
             [
                 "-m",
                 "coverage",
                 "run",
-                f"--source={srcdir}",
-                f"--rcfile={rcfile}",
-                f"--data-file={covfile}",
+                f"--data-file={dotcov}",
                 "-p",
                 f"--omit={omitted}",
             ]
@@ -113,7 +100,6 @@ def integration(api_integration, xprocess, request):
     )
     if run_async:
         run_args.append("--async")
-    print(" ".join(str(e) for e in run_args))
     run_env = {
         "API_ROOT": API_ROOT,
         "PYTHONUNBUFFERED": "1",
@@ -141,10 +127,31 @@ def integration(api_integration, xprocess, request):
 
         pattern = rf"Running on {PROXY_ROOT}"
 
-    xprocess.ensure("proxy", ProxyStarter)
-    yield
-    print(open(xprocess.getinfo("proxy").logpath, 'r').read())
+    proxy_process = xprocess.ensure("proxy", ProxyStarter)
+    yield proxy_process
     xprocess.getinfo("proxy").terminate()
+
+
+@pytest.fixture(scope='module')
+def integration_memory_limit(integration):
+    proxy_pid, proxy_logs = integration
+
+    def error_on_memory_above_100m(stop):
+        while True:
+            memory = psutil.Process(proxy_pid).memory_info().rss / 1024 ** 2
+            if memory > 100:
+                print('memory above 100M')
+            if stop():
+                break
+            time.sleep(0.01)
+        return
+
+    stop_thread = False
+    t = threading.Thread(target=error_on_memory_above_100m, args=(lambda: stop_thread, ))
+    t.start()
+    yield
+    stop_thread = True
+    t.join()
 
 
 @pytest.mark.integration
@@ -224,3 +231,42 @@ def test_api_unauthorized(integration):
     assert not response.ok
     assert response.status_code == 401
     assert response.text == "not authorized by API"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "integration", [True, False], ids=["async", "sync"], indirect=True
+)
+@pytest.mark.parametrize(
+    "body_size", [10, 100*1e3, 200*1e6], ids=["10 B", "100 kB", "200 MB"]
+)
+def test_api_proxy_memory_limit(integration, body_size, integration_memory_limit):
+    response = requests.post(
+        f"{PROXY_ROOT}/__magictoken",
+        json={"allowed": ["POST /"], "token": "fake_token"},
+    )
+    assert response.ok
+    assert response.status_code == 200
+
+    proxy_token = response.text
+
+    data = bytearray(os.urandom(int(body_size)))
+
+    response = requests.post(
+        f"{API_ROOT}/endpoint",
+        data=data
+    )
+    assert response.ok
+    assert response.status_code == 200
+
+    response = requests.post(
+        f"{PROXY_ROOT}/endpoint",
+        headers={"Authorization": f"Bearer {proxy_token}"},
+        data=data
+    )
+    assert response.ok
+    assert response.status_code == 200
+    time.sleep(30)
+
+
+

@@ -14,8 +14,10 @@
 import logging
 import re
 import types
+from io import BytesIO
 from typing import List, Union, Optional
 
+from typing.io import BinaryIO
 from magicproxy.config import Config
 from magicproxy.types import Permission
 
@@ -93,6 +95,9 @@ def validate_request(
     return False
 
 
+def response_callback(
+    method, path, content: BytesIO, code, headers, scopes: Optional[List[str]] = None
+):
 def response_callback(
     config: Config,
     method,

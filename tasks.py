@@ -86,6 +86,7 @@ def test_coverage(c):
     c.run("pip install -e .")
     args = tuple()
     if "--" in sys.argv:
+<<<<<<< HEAD
         args = sys.argv[sys.argv.index("--") + 1 :]
 
     c.run("coverage erase")
@@ -96,3 +97,16 @@ def test_coverage(c):
     c.run(f"coverage report {datafile}")
     c.run(f"coverage json {datafile} -o ../coverage.json")
     c.run(f"coverage xml {datafile} -o ../coverage.xml")
+||||||| ancestor
+        args = sys.argv[sys.argv.index("--") + 1:]
+
+    c.run("coverage run -m pytest tests " + " ".join(args))
+    c.run("coverage combine .coverage*")
+    c.run("coverage report")
+=======
+        args = sys.argv[sys.argv.index("--") + 1 :]
+
+    c.run("coverage run -m pytest tests " + " ".join(args))
+    c.run("coverage combine .coverage*")
+    c.run("coverage report")
+>>>>>>> c89476c... wip
