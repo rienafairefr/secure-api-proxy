@@ -21,11 +21,11 @@ import requests
 
 import magicproxy
 import magicproxy.types
+from . import magictoken
+from . import queries
+from . import scopes
 from .config import Config, load_config
 from .headers import clean_request_headers, clean_response_headers
-from . import magictoken
-from . import scopes
-from . import queries
 from .magictoken import magictoken_params_validate
 
 logger = logging.getLogger(__name__)
