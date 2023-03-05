@@ -1,4 +1,3 @@
 [run]
 omit = *tests*,*examples*
 parallel = True
-concurrency = multiprocessing

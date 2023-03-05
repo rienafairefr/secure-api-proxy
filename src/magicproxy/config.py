@@ -3,6 +3,8 @@ import json
 import logging
 import os
 import pathlib
+import types
+import typing
 from collections.abc import Mapping
 from typing import Union
 
@@ -12,12 +14,25 @@ from magicproxy.types import Permission
 
 logger = logging.getLogger(__name__)
 
-
 DEFAULT_API_ROOT = "https://api.github.com"
-DEFAULT_PRIVATE_KEY_LOCATION = "keys/private.pem"
-DEFAULT_PUBLIC_KEY_LOCATION = "keys/public.pem"
-DEFAULT_PUBLIC_CERTIFICATE_LOCATION = "keys/public.x509.cer"
+DEFAULT_KEYS_LOCATION = "keys"
+DEFAULT_PRIVATE_KEY_LOCATION = os.path.join(DEFAULT_KEYS_LOCATION, "private.pem")
+DEFAULT_PUBLIC_KEY_LOCATION = os.path.join(DEFAULT_KEYS_LOCATION, "public.pem")
+DEFAULT_PUBLIC_CERTIFICATE_LOCATION = os.path.join(
+    DEFAULT_KEYS_LOCATION, "public.x509.cer"
+)
 DEFAULT_PUBLIC_ACCESS = "http://localhost:5000"
+
+DEFAULT_CONFIG = dict(
+    api_root=DEFAULT_API_ROOT,
+    private_key_location=DEFAULT_PRIVATE_KEY_LOCATION,
+    public_key_location=DEFAULT_PUBLIC_KEY_LOCATION,
+    public_certificate_location=DEFAULT_PUBLIC_CERTIFICATE_LOCATION,
+    public_access=DEFAULT_PUBLIC_ACCESS,
+    plugins_location=None,
+    scopes={},
+    keys=None,
+)
 
 
 @dataclasses.dataclass
@@ -30,24 +45,53 @@ class Config:
     ] = DEFAULT_PUBLIC_CERTIFICATE_LOCATION
     public_access: str = DEFAULT_PUBLIC_ACCESS
     plugins_location: Union[str, pathlib.Path] = None
-    scopes: dict = dataclasses.field(default_factory=lambda: {})
+    scopes: typing.Dict[str, Union[Permission, types.ModuleType]] = dataclasses.field(
+        default_factory=lambda: {}
+    )
     keys: Keys = None
+
+    @property
+    def serializable(self):
+        def serializable(scope):
+            if isinstance(scope, types.ModuleType):
+                return str(scope)
+            if isinstance(scope, list):
+                return [dataclasses.asdict(e) for e in scope]
+
+        return {
+            "api_root": self.api_root,
+            "private_key_location": self.private_key_location,
+            "public_key_location": self.public_key_location,
+            "public_certificate_location": self.public_certificate_location,
+            "public_access": self.public_access,
+            "plugins_location": self.plugins_location,
+            "scopes": {k: serializable(scope) for k, scope in self.scopes.items()},
+            "keys": "****",
+        }
 
 
 def from_env():
-    return Config(
-        api_root=os.environ.get("API_ROOT") or DEFAULT_API_ROOT,
-        private_key_location=os.environ.get("PRIVATE_KEY_LOCATION")
-        or DEFAULT_PRIVATE_KEY_LOCATION,
-        public_key_location=os.environ.get("PUBLIC_KEY_LOCATION")
-        or DEFAULT_PUBLIC_KEY_LOCATION,
-        public_certificate_location=os.environ.get("PUBLIC_CERTIFICATE_LOCATION")
-        or DEFAULT_PUBLIC_CERTIFICATE_LOCATION,
-        public_access=os.environ.get("PUBLIC_ACCESS") or DEFAULT_PUBLIC_ACCESS,
+    keys_location = os.environ.get("KEYS_LOCATION")
+    if keys_location is not None:
+        private_key_location = os.path.join(keys_location, "private.pem")
+        public_key_location = os.path.join(keys_location, "public.pem")
+        public_certificate_location = os.path.join(keys_location, "public.x509.cer")
+    else:
+        private_key_location = os.environ.get("PRIVATE_KEY_LOCATION")
+        public_key_location = os.environ.get("PUBLIC_KEY_LOCATION")
+        public_certificate_location = os.environ.get("PUBLIC_CERTIFICATE_LOCATION")
+    return dict(
+        public_access=os.environ.get("PUBLIC_ACCESS"),
+        api_root=os.environ.get("API_ROOT"),
+        private_key_location=private_key_location,
+        public_key_location=public_key_location,
+        public_certificate_location=public_certificate_location,
     )
 
 
-def from_file(config_file):
+def from_file(config_file=None):
+    if config_file is None:
+        return {}
     try:
         config_string = open(config_file, "r", encoding="utf-8").read()
     except IOError:
@@ -66,32 +110,51 @@ def from_file(config_file):
     plugins_location = config.get("plugins_location")
     if plugins_location:
         scopes.update(**load_plugins(plugins_location))
-    return Config(
-        api_root=config.get("api_root") or DEFAULT_API_ROOT,
-        private_key_location=config.get("private_key_location")
-        or DEFAULT_PRIVATE_KEY_LOCATION,
-        public_key_location=config.get("public_key_location")
-        or DEFAULT_PUBLIC_KEY_LOCATION,
-        public_certificate_location=config.get("public_certificate_location")
-        or DEFAULT_PUBLIC_CERTIFICATE_LOCATION,
-        public_access=config.get("public_access") or DEFAULT_PUBLIC_ACCESS,
+
+    keys_location = config.get("keys_location")
+    if keys_location is not None:
+        private_key_location = os.path.join(keys_location, "private.pem")
+        public_key_location = os.path.join(keys_location, "public.pem")
+        public_certificate_location = os.path.join(keys_location, "public.x509.cer")
+    else:
+        private_key_location = config.get("private_key_location")
+        public_key_location = config.get("public_key_location")
+        public_certificate_location = config.get("public_certificate_location")
+    return dict(
+        api_root=config.get("api_root"),
+        private_key_location=private_key_location,
+        public_key_location=public_key_location,
+        public_certificate_location=public_certificate_location,
+        public_access=config.get("public_access"),
         plugins_location=plugins_location,
         scopes=scopes,
     )
 
 
 def load_config(_load_keys=True, **kwargs):
-    CONFIG_FILE = os.environ.get("CONFIG_FILE")
+    file_config = from_file(os.environ.get("CONFIG_FILE"))
+    env_config = from_env()
+    kwargs_config = kwargs
 
-    config = from_file(CONFIG_FILE) if CONFIG_FILE else from_env()
+    config = {}
     for field in dataclasses.fields(Config):
-        if field.name in kwargs:
-            setattr(config, field.name, kwargs[field.name])
+        if kwargs_config.get(field.name) is not None:
+            config[field.name] = kwargs[field.name]
+        elif env_config.get(field.name) is not None:
+            config[field.name] = env_config[field.name]
+        elif file_config.get(field.name) is not None:
+            config[field.name] = file_config[field.name]
+        else:
+            config[field.name] = DEFAULT_CONFIG[field.name]
+
+    config = Config(**config)
 
     if _load_keys:
         config.keys = Keys.from_files(
             config.private_key_location, config.public_certificate_location
         )
+
+    logger.debug("config %s", json.dumps(config.serializable, indent=2))
 
     return config
 

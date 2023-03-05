@@ -14,7 +14,7 @@
 import logging
 import re
 import types
-from typing import List, Union, Optional
+from typing import List, Optional
 
 from magicproxy.config import Config
 from magicproxy.types import Permission
@@ -71,17 +71,18 @@ def validate_request(
     if not path.startswith("/"):
         path = f"/{path}"
 
+    # boolean OR: one of the scope allows: it's allowed
     for scope_key in scopes:
-        scope_element: Union[List[Permission], types.ModuleType] = config.scopes[
-            scope_key
-        ]
+        scope_element = config.scopes[scope_key]
         if isinstance(scope_element, list):
             for scope in scope_element:
                 if is_request_allowed(scope, method, path):
                     return True
         elif isinstance(scope_element, types.ModuleType):
             if hasattr(scope_element, "is_request_allowed"):
-                return scope_element.is_request_allowed(method=method, path=path)
+                if scope_element.is_request_allowed(method=method, path=path):
+                    return True
+        logger.debug(f'not allowed by scope {scope_key}')
 
     for allowed_item in allowed:
         allowed_method, allowed_path = allowed_item.split(" ", 1)
@@ -119,10 +120,10 @@ def response_callback(
         path = f"/{path}"
 
     for scope in scopes:
-        scope_element: Union[List[Permission], types.ModuleType] = config.scopes[scope]
+        scope_element = config.scopes[scope]
         if isinstance(scope_element, types.ModuleType):
             if hasattr(scope_element, "response_callback"):
-                return scope_element.response_callback(
+                scope_element.response_callback(
                     method=method,
                     path=path,
                     content=content,

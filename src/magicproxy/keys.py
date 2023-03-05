@@ -7,7 +7,6 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 from magicproxy.types import _Keys
 
-
 _BACKEND = backends.default_backend()
 _PADDING = padding.OAEP(
     mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None
@@ -38,3 +37,13 @@ class Keys(_Keys):
             certificate=certificate,
             certificate_pem=certificate_pem,
         )
+
+
+if __name__ == "__main__":
+    from magicproxy.config import load_config
+    from magicproxy.crypto import generate_keys
+
+    config = load_config(_load_keys=False)
+    if config.public_access is None:
+        raise RuntimeError("need a configured public access, to properly generate keys")
+    generate_keys(config)

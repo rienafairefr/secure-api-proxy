@@ -1,6 +1,7 @@
 import multiprocessing
 import os
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -8,6 +9,7 @@ from random import randrange
 from socket import create_connection
 
 import flask
+import psutil
 import pytest
 import requests
 
@@ -65,7 +67,7 @@ def api_integration():
 
         if authorization_header:
             if authorization_header.startswith("Bearer "):
-                if authorization_header[len("Bearer "):] == "fake_token":
+                if authorization_header[len("Bearer ") :] == "fake_token":
                     return "authorized by API", 200
 
         return "not authorized by API", 401
@@ -105,16 +107,18 @@ def integration(api_integration, request):
         )
 
     def proxy_target():
-        os.environ.update({
-            "API_ROOT": API_ROOT,
-            "PYTHONUNBUFFERED": "1",
-            "PUBLIC_ACCESS": PROXY_ROOT,
-            "PUBLIC_KEY_LOCATION": os.path.abspath(config.public_key_location),
-            "PRIVATE_KEY_LOCATION": os.path.abspath(config.private_key_location),
-            "PUBLIC_CERTIFICATE_LOCATION": os.path.abspath(
-                config.public_certificate_location
-            ),
-        })
+        os.environ.update(
+            {
+                "API_ROOT": API_ROOT,
+                "PYTHONUNBUFFERED": "1",
+                "PUBLIC_ACCESS": PROXY_ROOT,
+                "PUBLIC_KEY_LOCATION": os.path.abspath(config.public_key_location),
+                "PRIVATE_KEY_LOCATION": os.path.abspath(config.private_key_location),
+                "PUBLIC_CERTIFICATE_LOCATION": os.path.abspath(
+                    config.public_certificate_location
+                ),
+            }
+        )
         module = async_proxy if run_async else proxy
         module.run_app(host=PROXY_HOST, port=PROXY_PORT)
 
@@ -122,11 +126,13 @@ def integration(api_integration, request):
     proxy_process.start()
     wait_for_port(PROXY_HOST, PROXY_PORT, 10)
     yield
+    psutil.Process(proxy_process.pid).send_signal(signal.SIGINT)
+    time.sleep(10)
     proxy_process.terminate()
     proxy_process.join()
 
 
-async_or_not = (False, )
+async_or_not = (False,)
 async_or_not_ids = ["run_async" if r else "sync" for r in async_or_not]
 
 

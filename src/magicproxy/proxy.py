@@ -13,6 +13,7 @@
 # limitations under the License.
 import logging
 import os
+import sys
 import traceback
 from typing import Tuple, Set
 
@@ -40,6 +41,8 @@ custom_request_headers_to_clean: Set[str] = set()
 @app.route("/__magictoken", methods=["POST", "GET"])
 def create_magic_token():
     CONFIG: Config = app.config["CONFIG"]
+    if CONFIG is None:
+        return "magic API proxy version " + magicproxy.__version__, 503
     api_root = CONFIG.api_root
     if flask.request.method == "GET":
         return "magic API proxy for " + api_root + " version " + magicproxy.__version__
@@ -52,7 +55,8 @@ def create_magic_token():
     token = magictoken.create(
         CONFIG.keys, params["token"], params.get("scopes"), params.get("allowed")
     )
-
+    if "coverage" in sys.modules.keys():
+        print("covered")
     return token, 200, {"Content-Type": "application/jwt"}
 
 
@@ -91,6 +95,8 @@ def _proxy_request(
 @app.route("/<path:path>", methods=["POST", "GET", "PATCH", "PUT", "DELETE"])
 def proxy_api(path):
     CONFIG = app.config["CONFIG"]
+    if CONFIG is None:
+        return "magic API proxy version " + magicproxy.__version__, 503
     auth_token = flask.request.headers.get("Authorization")
     if auth_token is None:
         return "No authorization token presented", 401
@@ -135,8 +141,12 @@ def proxy_api(path):
 
 def build_app(config: Config = None):
     if config is None:
-        config = load_config()
-    app.config["CONFIG"] = config
+        try:
+            config = load_config()
+            app.config["CONFIG"] = config
+        except:
+            # backup app
+            app.config['CONFIG'] = None
     return app
 
 
