@@ -16,20 +16,22 @@ _PADDING = padding.OAEP(
 class Keys(_Keys):
     @classmethod
     def from_files(cls, private_key_file, certificate_file):
-        with open(private_key_file, "rb") as fh:
-            private_key_bytes = fh.read()
-            private_key = serialization.load_pem_private_key(
-                private_key_bytes, password=None, backend=_BACKEND
-            )
-            private_key_signer = google.auth.crypt.RSASigner.from_string(
-                private_key_bytes
-            )
+        try:
+            with open(private_key_file, "rb") as fh:
+                private_key_bytes = fh.read()
+                private_key = serialization.load_pem_private_key(
+                    private_key_bytes, password=None, backend=_BACKEND
+                )
+                private_key_signer = google.auth.crypt.RSASigner.from_string(
+                    private_key_bytes
+                )
 
-        with open(certificate_file, "rb") as fh:
-            certificate_pem = fh.read()
-            certificate = x509.load_pem_x509_certificate(certificate_pem, _BACKEND)
-            public_key = certificate.public_key()
-
+            with open(certificate_file, "rb") as fh:
+                certificate_pem = fh.read()
+                certificate = x509.load_pem_x509_certificate(certificate_pem, _BACKEND)
+                public_key = certificate.public_key()
+        except IOError:
+            raise RuntimeError("I/O error, config file should be readable")
         return cls(
             private_key=private_key,
             private_key_signer=private_key_signer,

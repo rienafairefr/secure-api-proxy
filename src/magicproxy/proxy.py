@@ -40,20 +40,20 @@ custom_request_headers_to_clean: Set[str] = set()
 
 @app.route("/__magictoken", methods=["POST", "GET"])
 def create_magic_token():
-    CONFIG: Config = app.config["CONFIG"]
-    if CONFIG is None:
+    config: Config = app.config["CONFIG"]
+    if config is None:
         return "magic API proxy version " + magicproxy.__version__, 503
-    api_root = CONFIG.api_root
+    api_root = config.api_root
     if flask.request.method == "GET":
         return "magic API proxy for " + api_root + " version " + magicproxy.__version__
     params = flask.request.json
     try:
-        magictoken_params_validate(CONFIG, params)
+        magictoken_params_validate(config, params)
     except ValueError as e:
         return str(e), 400
 
     token = magictoken.create(
-        CONFIG.keys, params["token"], params.get("scopes"), params.get("allowed")
+        config.keys, params["token"], params.get("scopes"), params.get("allowed")
     )
     if "coverage" in sys.modules.keys():
         print("covered")
@@ -94,8 +94,8 @@ def _proxy_request(
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>", methods=["POST", "GET", "PATCH", "PUT", "DELETE"])
 def proxy_api(path):
-    CONFIG = app.config["CONFIG"]
-    if CONFIG is None:
+    config = app.config["CONFIG"]
+    if config is None:
         return "magic API proxy version " + magicproxy.__version__, 503
     auth_token = flask.request.headers.get("Authorization")
     if auth_token is None:
@@ -106,13 +106,13 @@ def proxy_api(path):
 
     try:
         # Validate the magic token
-        token_info = magictoken.decode(CONFIG.keys, auth_token)
+        token_info = magictoken.decode(config.keys, auth_token)
     except ValueError:
         return "Not a valid magic token", 400
 
     # Validate scopes against URL and method.
     if not scopes.validate_request(
-        CONFIG, flask.request.method, path, token_info.scopes, token_info.allowed
+        config, flask.request.method, path, token_info.scopes, token_info.allowed
     ):
         return (
             "Disallowed by API proxy",
@@ -123,13 +123,13 @@ def proxy_api(path):
 
     response = _proxy_request(
         request=flask.request,
-        url=f"{CONFIG.api_root}/{path}",
+        url=f"{config.api_root}/{path}",
         headers={"Authorization": f"Bearer {token_info.token}"},
     )
 
     try:
         scopes.response_callback(
-            CONFIG, flask.request.method, path, *response, token_info.scopes
+            config, flask.request.method, path, *response, token_info.scopes
         )
     except Exception as e:
         logger.error("exception in response_callback")
@@ -144,8 +144,8 @@ def build_app(config: Config = None):
         try:
             config = load_config()
             app.config["CONFIG"] = config
-        except:
-            # backup app
+        except RuntimeError:
+            # run in degraded mode (503)
             app.config['CONFIG'] = None
     return app
 
