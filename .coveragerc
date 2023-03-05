@@ -1,3 +1,2 @@
 [run]
 omit = *tests*,*examples*
-parallel = True

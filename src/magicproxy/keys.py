@@ -49,3 +49,7 @@ if __name__ == "__main__":
     if config.public_access is None:
         raise RuntimeError("need a configured public access, to properly generate keys")
     generate_keys(config)
+    print(f'generated the keys')
+    print(config.private_key_location)
+    print(config.public_key_location)
+    print(config.public_certificate_location)
