@@ -111,7 +111,7 @@ def install_coverage_sitecustomize(c):
         if expected_site_customize_content == actual_site_customize_content:
             print("sitecustomize already OK for coverage")
         return
-
+    os.makedirs(packages, exist_ok=True)
     with open(site_customize_path, "w") as site_customize_file:
         site_customize_file.write(expected_site_customize_content)
 
