@@ -34,11 +34,7 @@ print("PROXY_PORT %s" % PROXY_PORT)
 
 def run(cmd):
     print(" ".join(shlex.quote(s) for s in cmd))
-    return (
-        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        .decode("utf-8")
-        .rstrip("\n")
-    )
+    return subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode("utf-8").rstrip("\n")
 
 
 def wait_for_port(host: str, port: int, timeout: float = 5.0):
@@ -52,8 +48,7 @@ def wait_for_port(host: str, port: int, timeout: float = 5.0):
             time.sleep(0.01)
             if time.perf_counter() - start_time >= timeout:
                 raise TimeoutError(
-                    "Waited too long for the port {} on host {} to start accepting "
-                    "connections.".format(port, host)
+                    "Waited too long for the port {} on host {} to start accepting " "connections.".format(port, host)
                 ) from ex
 
 
@@ -83,28 +78,9 @@ def api_integration():
     api_process.join()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(params=[True, False])
 def integration(api_integration, request):
     run_async = request.param
-    run_args = [sys.executable]
-    if "COVERAGE_RUN" in os.environ:
-        root_dir = os.path.join(os.path.dirname(__file__), "..")
-        rcfile = os.path.join(root_dir, ".coveragerc")
-        covfile = os.path.join(root_dir, ".coverage")
-        omitted = os.path.join(root_dir, "tests/*")
-        srcdir = os.path.join(root_dir, "src")
-        run_args.extend(
-            [
-                "-m",
-                "coverage",
-                "run",
-                f"--source={srcdir}",
-                f"--rcfile={rcfile}",
-                f"--data-file={covfile}",
-                "-p",
-                f"--omit={omitted}",
-            ]
-        )
 
     def proxy_target():
         os.environ.update(
@@ -114,19 +90,18 @@ def integration(api_integration, request):
                 "PUBLIC_ACCESS": PROXY_ROOT,
                 "PUBLIC_KEY_LOCATION": os.path.abspath(config.public_key_location),
                 "PRIVATE_KEY_LOCATION": os.path.abspath(config.private_key_location),
-                "PUBLIC_CERTIFICATE_LOCATION": os.path.abspath(
-                    config.public_certificate_location
-                ),
+                "PUBLIC_CERTIFICATE_LOCATION": os.path.abspath(config.public_certificate_location),
             }
         )
         module = async_proxy if run_async else proxy
+        print(module)
         module.run_app(host=PROXY_HOST, port=PROXY_PORT)
 
     proxy_process = multiprocessing.Process(target=proxy_target)
     proxy_process.start()
     wait_for_port(PROXY_HOST, PROXY_PORT, 10)
     yield
-    psutil.Process(proxy_process.pid).send_signal(signal.SIGINT)
+    psutil.Process(proxy_process.pid).send_signal(signal.SIGTERM)
     time.sleep(10)
     proxy_process.terminate()
     proxy_process.join()
@@ -137,9 +112,6 @@ async_or_not_ids = ["run_async" if r else "sync" for r in async_or_not]
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize(
-    "integration", async_or_not, ids=async_or_not_ids, indirect=True
-)
 def test_api_get___magictoken(integration):
     response = requests.get(f"{PROXY_ROOT}/__magictoken")
     assert response.ok
@@ -150,66 +122,39 @@ def test_api_get___magictoken(integration):
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize(
-    "integration", async_or_not, ids=async_or_not_ids, indirect=True
-)
 def test_extra_keys(integration):
-    response = requests.post(
-        f"{PROXY_ROOT}/__magictoken",
-        json={"allowed": ["GET /.*"], "token_": "fake_token"},
-    )
+    response = requests.post(f"{PROXY_ROOT}/__magictoken", json={"allowed": ["GET /.*"], "token_": "fake_token"},)
     assert not response.ok
     assert response.status_code == 400
 
-    response = requests.post(
-        f"{PROXY_ROOT}/__magictoken",
-        json={"allowed_": ["GET /.*"], "token": "fake_token"},
-    )
+    response = requests.post(f"{PROXY_ROOT}/__magictoken", json={"allowed_": ["GET /.*"], "token": "fake_token"},)
     assert not response.ok
     assert response.status_code == 400
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize(
-    "integration", async_or_not, ids=async_or_not_ids, indirect=True
-)
 def test_api_authorized(integration):
-    response = requests.post(
-        f"{PROXY_ROOT}/__magictoken",
-        json={"allowed": ["GET /.*"], "token": "fake_token"},
-    )
+    response = requests.post(f"{PROXY_ROOT}/__magictoken", json={"allowed": ["GET /.*"], "token": "fake_token"},)
     assert response.ok
     assert response.status_code == 200
 
     proxy_token = response.text
 
-    response = requests.get(
-        PROXY_ROOT,
-        headers={"Authorization": f"Bearer {proxy_token}"},
-    )
+    response = requests.get(PROXY_ROOT, headers={"Authorization": f"Bearer {proxy_token}"},)
     assert response.ok
     assert response.status_code == 200
     assert response.text == "authorized by API"
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize(
-    "integration", async_or_not, ids=async_or_not_ids, indirect=True
-)
 def test_api_unauthorized(integration):
-    response = requests.post(
-        f"{PROXY_ROOT}/__magictoken",
-        json={"allowed": ["GET /.*"], "token": "wrong_token"},
-    )
+    response = requests.post(f"{PROXY_ROOT}/__magictoken", json={"allowed": ["GET /.*"], "token": "wrong_token"},)
     assert response.ok
     assert response.status_code == 200
 
     proxy_token = response.text
 
-    response = requests.get(
-        f"{PROXY_ROOT}/",
-        headers={"Authorization": f"Bearer {proxy_token}"},
-    )
+    response = requests.get(f"{PROXY_ROOT}/", headers={"Authorization": f"Bearer {proxy_token}"},)
     assert not response.ok
     assert response.status_code == 401
     assert response.text == "not authorized by API"

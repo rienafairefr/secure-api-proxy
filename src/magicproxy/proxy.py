@@ -11,13 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import atexit
 import logging
 import os
 import sys
+import threading
 import traceback
+from pprint import pprint
 from typing import Tuple, Set
 
 import flask
+import psutil
 import requests
 
 import magicproxy
@@ -55,8 +59,6 @@ def create_magic_token():
     token = magictoken.create(
         config.keys, params["token"], params.get("scopes"), params.get("allowed")
     )
-    if "coverage" in sys.modules.keys():
-        print("covered")
     return token, 200, {"Content-Type": "application/jwt"}
 
 
@@ -140,13 +142,17 @@ def proxy_api(path):
 
 
 def build_app(config: Config = None):
+    if "COVERAGE_RUN" in os.environ:
+        import coverage
+
+        coverage.process_startup()
     if config is None:
         try:
             config = load_config()
-            app.config["CONFIG"] = config
         except RuntimeError:
-            # run in degraded mode (503)
-            app.config['CONFIG'] = None
+            # will run, but in degraded mode (503)
+            pass
+    app.config["CONFIG"] = config
     return app
 
 

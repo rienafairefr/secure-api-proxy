@@ -82,7 +82,7 @@ def validate_request(
             if hasattr(scope_element, "is_request_allowed"):
                 if scope_element.is_request_allowed(method=method, path=path):
                     return True
-        logger.debug(f'not allowed by scope {scope_key}')
+        logger.debug(f"not allowed by scope {scope_key}")
 
     for allowed_item in allowed:
         allowed_method, allowed_path = allowed_item.split(" ", 1)

@@ -138,7 +138,11 @@ async def proxy_api(request):
 async def build_app(config: Config = None):
     app = aiohttp.web.Application()
     if config is None:
-        config = load_config()
+        try:
+            config = load_config()
+        except RuntimeError:
+            # will run, but in degraded mode (503)
+            pass
     app["CONFIG"] = config
     app.add_routes(routes)
     return app
