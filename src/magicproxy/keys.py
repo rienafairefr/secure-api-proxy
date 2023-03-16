@@ -8,9 +8,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from magicproxy.types import _Keys
 
 _BACKEND = backends.default_backend()
-_PADDING = padding.OAEP(
-    mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None
-)
+_PADDING = padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
 
 
 class Keys(_Keys):
@@ -19,12 +17,8 @@ class Keys(_Keys):
         try:
             with open(private_key_file, "rb") as fh:
                 private_key_bytes = fh.read()
-                private_key = serialization.load_pem_private_key(
-                    private_key_bytes, password=None, backend=_BACKEND
-                )
-                private_key_signer = google.auth.crypt.RSASigner.from_string(
-                    private_key_bytes
-                )
+                private_key = serialization.load_pem_private_key(private_key_bytes, password=None, backend=_BACKEND)
+                private_key_signer = google.auth.crypt.RSASigner.from_string(private_key_bytes)
 
             with open(certificate_file, "rb") as fh:
                 certificate_pem = fh.read()
@@ -49,7 +43,7 @@ if __name__ == "__main__":
     if config.public_access is None:
         raise RuntimeError("need a configured public access, to properly generate keys")
     generate_keys(config)
-    print(f"generated the keys")
+    print("generated the keys")
     print(config.private_key_location)
     print(config.public_key_location)
     print(config.public_certificate_location)

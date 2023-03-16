@@ -3,8 +3,8 @@ import os
 import shlex
 import signal
 import subprocess
-import sys
 import time
+from multiprocessing import Process
 from random import randrange
 from socket import create_connection
 
@@ -16,7 +16,6 @@ import requests
 import magicproxy
 from magicproxy import async_proxy, proxy
 from magicproxy.config import load_config
-from multiprocessing import Process
 
 API_PORT = randrange(50000, 55000)
 API_HOST = "localhost"
