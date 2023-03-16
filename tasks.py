@@ -15,6 +15,9 @@ import glob
 import os
 import site
 import sys
+from os.path import join, exists
+from pathlib import Path
+
 import requests
 
 from invoke import task
@@ -28,9 +31,7 @@ def create_token(c):
     config = load_config()
 
     url = (
-        config.PUBLIC_ACCESS
-        if config.PUBLIC_ACCESS
-        else input("Enter the URL for your proxy (https://example.com): ")
+        config.PUBLIC_ACCESS if config.PUBLIC_ACCESS else input("Enter the URL for your proxy (https://example.com): ")
     )
     token = input("Enter your API Token: ")
     permissions = input("Enter a comma-separate list of permissions: ")
@@ -90,9 +91,38 @@ def test_coverage(c):
 
     c.run("coverage erase")
     c.run("coverage run --source src -m pytest tests " + " ".join(args))
-    os.chdir('src')
-    datafile = "--data-file=../.coverage"
-    c.run(f"coverage combine {datafile}")
-    c.run(f"coverage report {datafile}")
-    c.run(f"coverage json {datafile} -o ../coverage.json")
-    c.run(f"coverage xml {datafile} -o ../coverage.xml")
+    c.run(f"coverage combine")
+    c.run(f"coverage report")
+    c.run(f"coverage html")
+    c.run(f"coverage json")
+    c.run(f"coverage xml")
+
+
+expected_site_customize_content = "import coverage\ncoverage.process_startup()"
+
+
+@task
+def install_coverage_sitecustomize(c):
+    packages = Path(site.getusersitepackages())
+
+    site_customize_path = join(packages, "coverage.pth")
+    if exists(site_customize_path):
+        actual_site_customize_content = open(site_customize_path, "r").read()
+        if expected_site_customize_content == actual_site_customize_content:
+            print("sitecustomize already OK for coverage")
+        return
+    os.makedirs(packages, exist_ok=True)
+    with open(site_customize_path, "w") as site_customize_file:
+        site_customize_file.write(expected_site_customize_content)
+
+
+@task
+def uninstall_coverage_sitecustomize(c):
+    packages = Path(site.getusersitepackages())
+
+    site_customize_path = join(packages, "coverage.pth")
+    if exists(site_customize_path):
+        os.remove(site_customize_path)
+        print("removed customization for coverage in sitecustomize")
+    else:
+        print("sitecustomize not customized for coverage, nothing to do")

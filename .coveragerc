@@ -1,4 +1,6 @@
 [run]
 omit = *tests*,*examples*
-parallel = True
-
+source = src
+parallel = true
+concurrency = multiprocessing,thread
+sigterm = true

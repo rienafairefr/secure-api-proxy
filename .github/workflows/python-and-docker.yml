@@ -95,7 +95,9 @@ jobs:
       - name: Lint with flake8
         run: invoke lint
       - name: Test with pytest
-        run: invoke test-coverage -- -vvv -s --integration
+        run: |
+          invoke install-coverage-sitecustomize
+          invoke test-coverage -- -vvv -s --integration
       - name: Code Coverage Report
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
