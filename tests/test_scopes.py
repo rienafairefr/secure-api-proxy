@@ -5,9 +5,7 @@ from magicproxy.types import Permission
 
 def test_valid_scopes():
     assert is_request_allowed(Permission(method="GET", path="/this"), "GET", "/this")
-    assert is_request_allowed(
-        Permission(method="GET", path="/subpath/*"), "GET", "/subpath/works"
-    )
+    assert is_request_allowed(Permission(method="GET", path="/subpath/*"), "GET", "/subpath/works")
     assert is_request_allowed(
         Permission(method="GET", path="/subpath*"),
         "GET",
@@ -15,12 +13,8 @@ def test_valid_scopes():
     )
     assert is_request_allowed(Permission(method="GET", path="/this*"), "GET", "this")
 
-    assert not is_request_allowed(
-        Permission(method="GET", path="/this"), "GET", "/that"
-    )
-    assert not is_request_allowed(
-        Permission(method="GET", path="/subpath*"), "PUT", "/different/method/fails"
-    )
+    assert not is_request_allowed(Permission(method="GET", path="/this"), "GET", "/that")
+    assert not is_request_allowed(Permission(method="GET", path="/subpath*"), "PUT", "/different/method/fails")
 
 
 def test_request_allowed():

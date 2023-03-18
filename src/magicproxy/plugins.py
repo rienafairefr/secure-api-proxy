@@ -52,10 +52,7 @@ def load_plugin(python_file):
     if has_is_requests_allowed or has_response_callback:
         if has_is_requests_allowed:
             signature = inspect.signature(module.is_request_allowed)
-            if (
-                "method" not in signature.parameters
-                and "path" not in signature.parameters
-            ):
+            if "method" not in signature.parameters and "path" not in signature.parameters:
                 raise InvalidPluginError(
                     "%s is_request_allowed member needs 'method', 'path' parameters",
                     plugin_str,
@@ -73,8 +70,6 @@ def load_plugin(python_file):
                     plugin_str,
                 )
     else:
-        raise InvalidPluginError(
-            "%s no member is_request_allowed or request_callback", plugin_str
-        )
+        raise InvalidPluginError("%s no member is_request_allowed or request_callback", plugin_str)
 
     return scope_key, module

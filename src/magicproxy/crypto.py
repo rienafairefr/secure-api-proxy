@@ -39,6 +39,4 @@ def generate_keys(config: Config):
     certificate.sign(pkey, "sha256")
 
     with open(config.public_certificate_location, "wb") as certificate_file:
-        certificate_file.write(
-            crypto.dump_certificate(crypto.FILETYPE_PEM, certificate)
-        )
+        certificate_file.write(crypto.dump_certificate(crypto.FILETYPE_PEM, certificate))

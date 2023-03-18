@@ -33,6 +33,4 @@ def response_callback(content: bytes, code, headers):
     data = json.loads(content.decode("utf-8"))
 
     domain_id = data["domain_record"]["id"]
-    client.lpush(
-        "allowed", f"DELETE {domain_records_root}/{domain_id}"
-    )  # push an 'allow delete' on that id
+    client.lpush("allowed", f"DELETE {domain_records_root}/{domain_id}")  # push an 'allow delete' on that id

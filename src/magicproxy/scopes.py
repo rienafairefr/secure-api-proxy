@@ -86,9 +86,7 @@ def validate_request(
 
     for allowed_item in allowed:
         allowed_method, allowed_path = allowed_item.split(" ", 1)
-        if is_request_allowed(
-            Permission(method=allowed_method, path=allowed_path), method, path
-        ):
+        if is_request_allowed(Permission(method=allowed_method, path=allowed_path), method, path):
             return True
 
     return False

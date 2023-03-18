@@ -18,9 +18,7 @@ DEFAULT_API_ROOT = "https://api.github.com"
 DEFAULT_KEYS_LOCATION = "keys"
 DEFAULT_PRIVATE_KEY_LOCATION = os.path.join(DEFAULT_KEYS_LOCATION, "private.pem")
 DEFAULT_PUBLIC_KEY_LOCATION = os.path.join(DEFAULT_KEYS_LOCATION, "public.pem")
-DEFAULT_PUBLIC_CERTIFICATE_LOCATION = os.path.join(
-    DEFAULT_KEYS_LOCATION, "public.x509.cer"
-)
+DEFAULT_PUBLIC_CERTIFICATE_LOCATION = os.path.join(DEFAULT_KEYS_LOCATION, "public.x509.cer")
 DEFAULT_PUBLIC_ACCESS = "http://localhost:5000"
 
 DEFAULT_CONFIG = dict(
@@ -40,14 +38,10 @@ class Config:
     api_root: str = DEFAULT_API_ROOT
     private_key_location: Union[str, pathlib.Path] = DEFAULT_PRIVATE_KEY_LOCATION
     public_key_location: Union[str, pathlib.Path] = DEFAULT_PUBLIC_KEY_LOCATION
-    public_certificate_location: Union[
-        str, pathlib.Path
-    ] = DEFAULT_PUBLIC_CERTIFICATE_LOCATION
+    public_certificate_location: Union[str, pathlib.Path] = DEFAULT_PUBLIC_CERTIFICATE_LOCATION
     public_access: str = DEFAULT_PUBLIC_ACCESS
     plugins_location: Union[str, pathlib.Path] = None
-    scopes: typing.Dict[str, Union[Permission, types.ModuleType]] = dataclasses.field(
-        default_factory=lambda: {}
-    )
+    scopes: typing.Dict[str, Union[Permission, types.ModuleType]] = dataclasses.field(default_factory=lambda: {})
     keys: Keys = None
 
     @property
@@ -150,9 +144,7 @@ def load_config(_load_keys=True, **kwargs):
     config = Config(**config)
 
     if _load_keys:
-        config.keys = Keys.from_files(
-            config.private_key_location, config.public_certificate_location
-        )
+        config.keys = Keys.from_files(config.private_key_location, config.public_certificate_location)
 
     logger.debug("config %s", json.dumps(config.serializable, indent=2))
 
@@ -171,6 +163,4 @@ def parse_permission(element: Union[str, Mapping]) -> Permission:
         if "method" in element and "path" in element:
             return Permission(method=element["method"], path=element["path"])
         else:
-            raise ValueError(
-                "a scope mapping should be a mapping with method, path keys"
-            )
+            raise ValueError("a scope mapping should be a mapping with method, path keys")

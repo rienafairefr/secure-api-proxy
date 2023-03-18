@@ -27,19 +27,13 @@ def test_generate_keys(tmp_path):
     assert "-----BEGIN PRIVATE KEY-----" in private_key_location.read_text()
     assert "-----BEGIN CERTIFICATE-----" in public_certificate_location.read_text()
 
-    public_key = crypto.load_publickey(
-        crypto.FILETYPE_PEM, public_key_location.read_bytes()
-    )
-    private_key = crypto.load_privatekey(
-        crypto.FILETYPE_PEM, private_key_location.read_bytes()
-    )
-    certificate = crypto.load_certificate(
-        crypto.FILETYPE_PEM, public_certificate_location.read_bytes()
-    )
+    public_key = crypto.load_publickey(crypto.FILETYPE_PEM, public_key_location.read_bytes())
+    private_key = crypto.load_privatekey(crypto.FILETYPE_PEM, private_key_location.read_bytes())
+    certificate = crypto.load_certificate(crypto.FILETYPE_PEM, public_certificate_location.read_bytes())
 
-    assert crypto.dump_publickey(
-        crypto.FILETYPE_ASN1, private_key
-    ) == crypto.dump_publickey(crypto.FILETYPE_ASN1, public_key)
+    assert crypto.dump_publickey(crypto.FILETYPE_ASN1, private_key) == crypto.dump_publickey(
+        crypto.FILETYPE_ASN1, public_key
+    )
 
     context = SSL.Context(SSL.TLSv1_METHOD)
     context.use_privatekey(private_key)

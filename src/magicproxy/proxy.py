@@ -61,18 +61,23 @@ def _proxy_request(request: flask.Request, url: str, headers=None, **kwargs) -> 
     if headers:
         clean_headers.update(headers)
 
-    print(
+    logger.debug(
         f"Proxying to {request.method} {url}\nHeaders: {clean_headers}\nQuery: {request.args}\nContent: {request.data!r}"
     )
 
     # Make the API request
     resp = requests.request(
-        url=url, method=request.method, headers=clean_headers, params=dict(request.args), data=request.data, **kwargs,
+        url=url,
+        method=request.method,
+        headers=clean_headers,
+        params=dict(request.args),
+        data=request.data,
+        **kwargs,
     )
 
     response_headers = clean_response_headers(resp.headers)
 
-    print(resp, resp.headers, resp.content)
+    logger.debug(resp, resp.headers, resp.content)
 
     return resp.content, resp.status_code, response_headers
 
@@ -106,7 +111,9 @@ def proxy_api(path):
     path = queries.clean_path_queries(query_params_to_clean, path)
 
     response = _proxy_request(
-        request=flask.request, url=f"{config.api_root}/{path}", headers={"Authorization": f"Bearer {token_info.token}"},
+        request=flask.request,
+        url=f"{config.api_root}/{path}",
+        headers={"Authorization": f"Bearer {token_info.token}"},
     )
 
     try:
@@ -136,5 +143,7 @@ def build_app(config: Config = None):
 
 def run_app(host, port, config: Config = None):
     build_app(config).run(
-        host=host, port=port, use_reloader=os.environ.get("FLASK_USE_RELOADER") is not None,
+        host=host,
+        port=port,
+        use_reloader=os.environ.get("FLASK_USE_RELOADER") is not None,
     )

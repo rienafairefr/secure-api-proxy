@@ -74,9 +74,7 @@ def create(keys: _Keys, token, scopes=None, allowed=None) -> str:
 
 
 def decode(keys, token) -> DecodeResult:
-    claims = dict(
-        google.auth.jwt.decode(token, verify=True, certs=[keys.certificate_pem])
-    )
+    claims = dict(google.auth.jwt.decode(token, verify=True, certs=[keys.certificate_pem]))
 
     decoded_token = base64.b64decode(claims["token"])
     decrypted_token = _decrypt(keys.private_key, decoded_token).decode("utf-8")
@@ -105,9 +103,7 @@ def magictoken_params_validate(config: Config, params: dict):
             if not isinstance(params_scope, str):
                 raise ValueError("scope must be a string")
             if params_scope not in config.scopes:
-                raise ValueError(
-                    f"scope must be configured on the proxy (valid: {' '.join(config.scopes)})"
-                )
+                raise ValueError(f"scope must be configured on the proxy (valid: {' '.join(config.scopes)})")
         params["scopes"] = params_scopes
 
     elif "allowed" in params:

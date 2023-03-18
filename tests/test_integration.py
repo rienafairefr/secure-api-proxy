@@ -122,24 +122,36 @@ def test_api_get___magictoken(integration):
 
 @pytest.mark.integration
 def test_extra_keys(integration):
-    response = requests.post(f"{PROXY_ROOT}/__magictoken", json={"allowed": ["GET /.*"], "token_": "fake_token"},)
+    response = requests.post(
+        f"{PROXY_ROOT}/__magictoken",
+        json={"allowed": ["GET /.*"], "token_": "fake_token"},
+    )
     assert not response.ok
     assert response.status_code == 400
 
-    response = requests.post(f"{PROXY_ROOT}/__magictoken", json={"allowed_": ["GET /.*"], "token": "fake_token"},)
+    response = requests.post(
+        f"{PROXY_ROOT}/__magictoken",
+        json={"allowed_": ["GET /.*"], "token": "fake_token"},
+    )
     assert not response.ok
     assert response.status_code == 400
 
 
 @pytest.mark.integration
 def test_api_authorized(integration):
-    response = requests.post(f"{PROXY_ROOT}/__magictoken", json={"allowed": ["GET /.*"], "token": "fake_token"},)
+    response = requests.post(
+        f"{PROXY_ROOT}/__magictoken",
+        json={"allowed": ["GET /.*"], "token": "fake_token"},
+    )
     assert response.ok
     assert response.status_code == 200
 
     proxy_token = response.text
 
-    response = requests.get(PROXY_ROOT, headers={"Authorization": f"Bearer {proxy_token}"},)
+    response = requests.get(
+        PROXY_ROOT,
+        headers={"Authorization": f"Bearer {proxy_token}"},
+    )
     assert response.ok
     assert response.status_code == 200
     assert response.text == "authorized by API"
@@ -147,13 +159,19 @@ def test_api_authorized(integration):
 
 @pytest.mark.integration
 def test_api_unauthorized(integration):
-    response = requests.post(f"{PROXY_ROOT}/__magictoken", json={"allowed": ["GET /.*"], "token": "wrong_token"},)
+    response = requests.post(
+        f"{PROXY_ROOT}/__magictoken",
+        json={"allowed": ["GET /.*"], "token": "wrong_token"},
+    )
     assert response.ok
     assert response.status_code == 200
 
     proxy_token = response.text
 
-    response = requests.get(f"{PROXY_ROOT}/", headers={"Authorization": f"Bearer {proxy_token}"},)
+    response = requests.get(
+        f"{PROXY_ROOT}/",
+        headers={"Authorization": f"Bearer {proxy_token}"},
+    )
     assert not response.ok
     assert response.status_code == 401
     assert response.text == "not authorized by API"
