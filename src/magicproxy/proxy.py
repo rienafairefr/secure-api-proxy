@@ -17,6 +17,7 @@ import traceback
 from typing import Tuple, Set
 
 import flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 import requests
 
 import magicproxy
@@ -67,12 +68,7 @@ def _proxy_request(request: flask.Request, url: str, headers=None, **kwargs) -> 
 
     # Make the API request
     resp = requests.request(
-        url=url,
-        method=request.method,
-        headers=clean_headers,
-        params=dict(request.args),
-        data=request.data,
-        **kwargs,
+        url=url, method=request.method, headers=clean_headers, params=dict(request.args), data=request.data, **kwargs,
     )
 
     response_headers = clean_response_headers(resp.headers)
@@ -111,9 +107,7 @@ def proxy_api(path):
     path = queries.clean_path_queries(query_params_to_clean, path)
 
     response = _proxy_request(
-        request=flask.request,
-        url=f"{config.api_root}/{path}",
-        headers={"Authorization": f"Bearer {token_info.token}"},
+        request=flask.request, url=f"{config.api_root}/{path}", headers={"Authorization": f"Bearer {token_info.token}"},
     )
 
     try:
@@ -138,12 +132,11 @@ def build_app(config: Config = None):
             # will run, but in degraded mode (503)
             pass
     app.config["CONFIG"] = config
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_for=1)
     return app
 
 
 def run_app(host, port, config: Config = None):
     build_app(config).run(
-        host=host,
-        port=port,
-        use_reloader=os.environ.get("FLASK_USE_RELOADER") is not None,
+        host=host, port=port, use_reloader=os.environ.get("FLASK_USE_RELOADER") is not None,
     )
